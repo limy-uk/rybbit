@@ -24,6 +24,8 @@ export async function parseScriptConfig(scriptTag: HTMLScriptElement): Promise<S
     return null;
   }
 
+  const namespace = scriptTag.getAttribute("data-namespace") || "rybbit";
+
   // These can be overridden via data attributes for testing/debugging
   const skipPatterns = parseJsonSafely<string[]>(scriptTag.getAttribute("data-skip-patterns"), []);
   const maskPatterns = parseJsonSafely<string[]>(scriptTag.getAttribute("data-mask-patterns"), []);
@@ -76,8 +78,14 @@ export async function parseScriptConfig(scriptTag: HTMLScriptElement): Promise<S
     ? parseJsonSafely<Record<string, boolean> | boolean>(slimDOMAttr, {})
     : undefined;
 
+  const sampleRateAttr = scriptTag.getAttribute("data-replay-sample-rate");
+  const sessionReplaySampleRate = sampleRateAttr
+    ? Math.min(100, Math.max(0, parseInt(sampleRateAttr, 10)))
+    : undefined;
+
   // Default config with minimal settings
   const defaultConfig: ScriptConfig = {
+    namespace,
     analyticsHost,
     siteId,
     debounceDuration,
@@ -94,6 +102,9 @@ export async function parseScriptConfig(scriptTag: HTMLScriptElement): Promise<S
     enableWebVitals: false,
     trackErrors: false,
     enableSessionReplay: false,
+    trackButtonClicks: false,
+    trackCopy: false,
+    trackFormInteractions: false,
     // rrweb session replay options (undefined means use rrweb defaults)
     sessionReplayBlockClass,
     sessionReplayBlockSelector,
@@ -105,6 +116,7 @@ export async function parseScriptConfig(scriptTag: HTMLScriptElement): Promise<S
     sessionReplayCollectFonts,
     sessionReplaySampling,
     sessionReplaySlimDOMOptions,
+    sessionReplaySampleRate,
   };
 
   try {
@@ -130,6 +142,9 @@ export async function parseScriptConfig(scriptTag: HTMLScriptElement): Promise<S
         enableWebVitals: apiConfig.webVitals ?? defaultConfig.enableWebVitals,
         trackErrors: apiConfig.trackErrors ?? defaultConfig.trackErrors,
         enableSessionReplay: apiConfig.sessionReplay ?? defaultConfig.enableSessionReplay,
+        trackButtonClicks: apiConfig.trackButtonClicks ?? defaultConfig.trackButtonClicks,
+        trackCopy: apiConfig.trackCopy ?? defaultConfig.trackCopy,
+        trackFormInteractions: apiConfig.trackFormInteractions ?? defaultConfig.trackFormInteractions,
       };
     } else {
       // If API call fails, log warning and use defaults
