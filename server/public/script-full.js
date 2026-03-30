@@ -110,6 +110,7 @@
     const sessionReplaySlimDOMOptions = slimDOMAttr ? parseJsonSafely(slimDOMAttr, {}) : void 0;
     const sampleRateAttr = scriptTag.getAttribute("data-replay-sample-rate");
     const sessionReplaySampleRate = sampleRateAttr ? Math.min(100, Math.max(0, parseInt(sampleRateAttr, 10))) : void 0;
+    const tag = scriptTag.getAttribute("data-tag") || "";
     const defaultConfig = {
       namespace,
       analyticsHost,
@@ -131,6 +132,7 @@
       trackButtonClicks: false,
       trackCopy: false,
       trackFormInteractions: false,
+      tag,
       // rrweb session replay options (undefined means use rrweb defaults)
       sessionReplayBlockClass,
       sessionReplayBlockSelector,
@@ -378,6 +380,49 @@
     }
   };
 
+  // botSignals.ts
+  function getBotScore() {
+    let score = 0;
+    try {
+      if (navigator.webdriver === true) {
+        score++;
+      }
+      if (window.outerHeight === 0 || window.outerWidth === 0) {
+        score++;
+      }
+      if (navigator.connection?.rtt === 0) {
+        score++;
+      }
+      if (!window.chrome && /Chrome\//.test(navigator.userAgent)) {
+        score++;
+      }
+      try {
+        const canvas = document.createElement("canvas");
+        const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+        if (gl) {
+          const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+          if (debugInfo) {
+            const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+            if (typeof renderer === "string" && renderer.includes("SwiftShader")) {
+              score++;
+            }
+          }
+        }
+      } catch (e2) {
+      }
+      if (navigator.plugins.length === 0 && /Chrome\//.test(navigator.userAgent)) {
+        score++;
+      }
+      try {
+        if (typeof Notification !== "undefined" && Notification.permission === "denied") {
+        }
+      } catch (e2) {
+      }
+    } catch (e2) {
+    }
+    return score;
+  }
+
   // tracking.ts
   var Tracker = class {
     constructor(config) {
@@ -450,10 +495,14 @@
         screenHeight: screen.height,
         language: navigator.language,
         page_title: document.title,
-        referrer: document.referrer
+        referrer: document.referrer,
+        _bs: getBotScore()
       };
       if (this.customUserId) {
         payload.user_id = this.customUserId;
+      }
+      if (this.config.tag) {
+        payload.tag = this.config.tag;
       }
       return payload;
     }
@@ -1053,7 +1102,16 @@
     }
     getElementText(element) {
       const text = element.textContent?.trim().substring(0, 100);
-      return text || void 0;
+      if (text) return text;
+      const ariaLabel = element.getAttribute("aria-label")?.trim().substring(0, 100);
+      if (ariaLabel) return ariaLabel;
+      if (element.tagName === "INPUT") {
+        const value = element.value?.trim().substring(0, 100);
+        if (value) return value;
+      }
+      const title = element.getAttribute("title")?.trim().substring(0, 100);
+      if (title) return title;
+      return void 0;
     }
     cleanup() {
       document.removeEventListener("click", this.handleClick.bind(this), true);
@@ -1114,6 +1172,7 @@
         formAction: form.action || "",
         method: (form.method || "get").toUpperCase(),
         fieldCount: form.elements.length,
+        ariaLabel: form.getAttribute("aria-label") || void 0,
         ...this.extractDataAttributes(form)
       };
       this.tracker.trackFormSubmit(properties);
@@ -1122,15 +1181,18 @@
       const target = event.target;
       const tagName = target.tagName.toUpperCase();
       if (!["INPUT", "SELECT", "TEXTAREA"].includes(tagName)) return;
+      if (target.disabled) return;
       if (tagName === "INPUT") {
         const inputType = target.type?.toLowerCase();
         if (inputType === "hidden" || inputType === "password") return;
       }
+      const inputName = target.name || target.id || target.getAttribute("aria-label") || target.placeholder || "";
       const properties = {
         element: tagName.toLowerCase(),
         inputType: tagName === "INPUT" ? target.type?.toLowerCase() : void 0,
-        inputName: target.name || target.id || "",
+        inputName,
         formId: target.form?.id || void 0,
+        formName: target.form?.name || void 0,
         ...this.extractDataAttributes(target)
       };
       this.tracker.trackInputChange(properties);
@@ -1181,6 +1243,23 @@
       };
       return;
     }
+    const earlyQueue = [];
+    const queueMethod = (method) => (...args) => {
+      earlyQueue.push([method, args]);
+    };
+    window[namespace] = {
+      pageview: queueMethod("pageview"),
+      event: queueMethod("event"),
+      error: queueMethod("error"),
+      trackOutbound: queueMethod("trackOutbound"),
+      identify: queueMethod("identify"),
+      setTraits: queueMethod("setTraits"),
+      clearUserId: queueMethod("clearUserId"),
+      getUserId: () => null,
+      startSessionReplay: queueMethod("startSessionReplay"),
+      stopSessionReplay: queueMethod("stopSessionReplay"),
+      isSessionReplayActive: () => false
+    };
     const config = await parseScriptConfig(scriptTag);
     if (!config) {
       return;
@@ -1287,6 +1366,10 @@
       stopSessionReplay: () => tracker.stopSessionReplay(),
       isSessionReplayActive: () => tracker.isSessionReplayActive()
     };
+    const api = window[config.namespace];
+    for (const [method, args] of earlyQueue) {
+      api[method](...args);
+    }
     setupEventListeners();
     window.addEventListener("beforeunload", () => {
       clickManager?.cleanup();

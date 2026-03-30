@@ -1,5 +1,6 @@
 "use client";
 
+import { useExtracted } from "next-intl";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useParams } from "next/navigation";
 import { useCallback, useState } from "react";
@@ -17,6 +18,7 @@ import { useEventLogState } from "./useEventLogState";
 const ALL_EVENT_TYPES = new Set(EVENT_TYPE_CONFIG.map((c) => c.value as string));
 
 export function EventLog() {
+  const t = useExtracted();
   const { site } = useParams();
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
@@ -91,7 +93,7 @@ export function EventLog() {
             onClick={flushAndScrollToTop}
             className="absolute top-12 left-1/2 -translate-x-1/2 z-30 px-3 py-1 rounded-full bg-accent-400 dark:bg-accent-600 text-white text-xs font-medium shadow-lg hover:bg-accent-300 dark:hover:bg-accent-500 transition-colors cursor-pointer"
           >
-            ↑ {bufferedCount} new event{bufferedCount !== 1 ? "s" : ""}
+            {t("{bufferedCount} new events", { bufferedCount: String(bufferedCount) })}
           </button>
         )}
 
@@ -101,13 +103,13 @@ export function EventLog() {
         >
           <div className="relative h-full pr-2 font-mono text-[11px] leading-4">
             <div className="sticky top-0 z-20 bg-neutral-50/95 dark:bg-neutral-850/95 backdrop-blur border-b border-neutral-100 dark:border-neutral-800">
-              <div className="grid grid-cols-[28px_140px_180px_100px_1fr_1fr] px-2 py-1.5 uppercase tracking-wide text-[10px] text-neutral-500 dark:text-neutral-400">
+              <div className="grid grid-cols-[28px_145px_180px_100px_1fr_1fr] px-2 py-1.5 uppercase tracking-wide text-[10px] text-neutral-500 dark:text-neutral-400">
                 <div></div>
-                <div>Timestamp</div>
-                <div>User</div>
-                <div>Device Info</div>
-                <div>Page</div>
-                <div>Data</div>
+                <div>{t("Timestamp")}</div>
+                <div>{t("User")}</div>
+                <div>{t("Device Info")}</div>
+                <div>{t("Page")}</div>
+                <div>{t("Data")}</div>
               </div>
             </div>
 
@@ -121,15 +123,15 @@ export function EventLog() {
 
             {isError && (
               <ErrorState
-                title="Failed to load events"
-                message="There was a problem fetching the events. Please try again later."
+                title={t("Failed to load events")}
+                message={t("There was a problem fetching the events. Please try again later.")}
               />
             )}
 
             {isFetched && !isError && allEvents.length === 0 && (
               <NothingFound
-                title={"No events found"}
-                description={"Try a different date range or filter"}
+                title={t("No events found")}
+                description={t("Try a different date range or filter")}
               />
             )}
 
@@ -199,7 +201,7 @@ export function EventLog() {
 
 function EventLogItemSkeleton({ showProperties }: { showProperties?: boolean }) {
   return (
-    <div className="grid grid-cols-[28px_140px_180px_100px_1fr_1fr] border-b border-neutral-100 dark:border-neutral-800 px-2 py-1">
+    <div className="grid grid-cols-[28px_145px_180px_100px_1fr_1fr] border-b border-neutral-100 dark:border-neutral-800 px-2 py-1">
       <div className="flex items-center justify-center">
         <div className="h-4 w-4 rounded bg-neutral-200 dark:bg-neutral-700 animate-pulse" />
       </div>
