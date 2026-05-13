@@ -79,6 +79,7 @@ import {
   createSiteImport,
   deleteSite,
   deleteSiteImport,
+  getEmbedStats,
   getSite,
   getSiteExcludedCountries,
   getSiteExcludedIPs,
@@ -104,6 +105,7 @@ import {
 } from "./api/stripe/index.js";
 import {
   addUserToOrganization,
+  createUserApiKey,
   getMyOrganizations,
   getUserOrganizations,
   listOrganizationMembers,
@@ -133,6 +135,7 @@ import { handleIdentify } from "./services/tracker/identifyService.js";
 import { trackEvent } from "./services/tracker/trackEvent.js";
 import { usageService } from "./services/usageService.js";
 import { weeklyReportService } from "./services/weekyReports/weeklyReportService.js";
+import { handleAppSumoWebhook, activateAppSumoLicense } from "./api/as/index.js";
 
 // Pre-composed middleware chains for common auth patterns
 // Cast as any to work around Fastify's type inference limitations with preHandler
@@ -296,6 +299,7 @@ async function sitesRoutes(fastify: FastifyInstance) {
   fastify.get("/sites/:siteId/private-link-config", adminSite, getSitePrivateLinkConfig);
   fastify.post("/sites/:siteId/private-link-config", adminSite, updateSitePrivateLinkConfig);
   fastify.get("/site/tracking-config/:siteId", getTrackingConfig); // Public - used by tracking script
+  fastify.get("/sites/:siteId/embed-stats", { preHandler: [resolveSiteId] as any }, getEmbedStats); // Public - widget endpoint (handler checks site is public)
   fastify.get("/sites/:siteId/excluded-ips", authSite, getSiteExcludedIPs);
   fastify.get("/sites/:siteId/excluded-countries", authSite, getSiteExcludedCountries);
   fastify.get("/sites/:siteId/verify-script", authSite, verifyScript);
@@ -303,7 +307,11 @@ async function sitesRoutes(fastify: FastifyInstance) {
   // Site Imports
   fastify.get("/sites/:siteId/imports", adminSite, getSiteImports);
   fastify.post("/sites/:siteId/imports", adminSite, createSiteImport);
-  fastify.post("/sites/:siteId/imports/:importId/events", adminSite, batchImportEvents);
+  fastify.post(
+    "/sites/:siteId/imports/:importId/events",
+    { ...adminSite, bodyLimit: 50 * 1024 * 1024 },
+    batchImportEvents
+  );
   fastify.delete("/sites/:siteId/imports/:importId", adminSite, deleteSiteImport);
 }
 
@@ -343,6 +351,7 @@ async function userRoutes(fastify: FastifyInstance) {
   fastify.post("/user/unsubscribe-marketing", authOnly, unsubscribeMarketing);
   fastify.get("/user/unsubscribe-marketing-oneclick", oneClickUnsubscribeMarketing); // Public - for link clicks
   fastify.post("/user/unsubscribe-marketing-oneclick", oneClickUnsubscribeMarketing); // Public - for List-Unsubscribe header
+  fastify.post("/user/api-keys", authOnly, createUserApiKey);
 }
 
 async function gscRoutes(fastify: FastifyInstance) {
@@ -377,9 +386,6 @@ async function stripeAdminRoutes(fastify: FastifyInstance) {
     fastify.get("/admin/organizations", adminOnly, getAdminOrganizations);
     fastify.get("/admin/service-event-count", adminOnly, getAdminServiceEventCount);
     fastify.post("/admin/telemetry", collectTelemetry); // Public - telemetry collection
-
-    // AppSumo Routes
-    const { activateAppSumoLicense, handleAppSumoWebhook } = await import("./api/as/index.js");
 
     fastify.post("/as/activate", authOnly, activateAppSumoLicense);
     fastify.post("/as/webhook", handleAppSumoWebhook); // Public - AppSumo webhook
